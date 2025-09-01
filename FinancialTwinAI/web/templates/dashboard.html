@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Twin LAM - Financial Engineering Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <h1>Digital Twin LAM</h1>
+                <p>Financial Engineering System</p>
+            </div>
+            <div class="real-time-indicator">
+                <span class="real-time-dot"></span>
+                <span>Live Data</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="{{ url_for('dashboard') }}" class="nav-link active">Dashboard</a>
+            <a href="{{ url_for('agents') }}" class="nav-link">Agents</a>
+            <a href="{{ url_for('traces') }}" class="nav-link">Decision Traces</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        {% if error %}
+        <div class="alert alert-danger">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- Dashboard Stats -->
+        <div class="dashboard-stats">
+            <div class="stat-card">
+                <div class="stat-value">
+                    ${{ "{:,.2f}".format(data.account_balance.cash_balance if data.account_balance else 0) }}
+                </div>
+                <div class="stat-label">Cash Balance</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">
+                    ${{ "{:,.2f}".format(data.account_balance.total_portfolio_value if data.account_balance else 0) }}
+                </div>
+                <div class="stat-label">Portfolio Value</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">
+                    {{ data.portfolio_positions|length }}
+                </div>
+                <div class="stat-label">Active Positions</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">
+                    {{ data.trace_statistics.total_traces if data.trace_statistics else 0 }}
+                </div>
+                <div class="stat-label">Decision Traces</div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard Grid -->
+        <div class="grid grid-2">
+            <!-- Portfolio Overview -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Portfolio Positions</h3>
+                    <span class="status active">
+                        <span class="status-dot"></span>
+                        Active
+                    </span>
+                </div>
+                {% if data.portfolio_positions %}
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th class="text-right">Quantity</th>
+                                <th class="text-right">Avg Price</th>
+                                <th class="text-right">Current Price</th>
+                                <th class="text-right">Value</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for position in data.portfolio_positions %}
+                            <tr>
+                                <td class="font-semibold">{{ position.symbol }}</td>
+                                <td class="text-right">{{ "{:.4f}".format(position.quantity) }}</td>
+                                <td class="text-right">${{ "{:.2f}".format(position.average_price) }}</td>
+                                <td class="text-right">
+                                    {% if position.current_price %}
+                                    ${{ "{:.2f}".format(position.current_price) }}
+                                    {% else %}
+                                    <span class="text-gray-600">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-right font-semibold">
+                                    {% if position.current_price %}
+                                    ${{ "{:.2f}".format(position.quantity * position.current_price) }}
+                                    {% else %}
+                                    ${{ "{:.2f}".format(position.quantity * position.average_price) }}
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-gray-600 mt-4">
+                    No active positions
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Market Overview -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Market Overview</h3>
+                    <span class="text-sm text-gray-600">{{ data.market_overview.last_updated[:19] if data.market_overview else 'N/A' }}</span>
+                </div>
+                {% if data.market_overview %}
+                <div class="grid grid-2 mb-4">
+                    <div class="metric-card">
+                        <div class="metric-value">
+                            <span class="status {% if data.market_overview.sentiment == 'bullish' %}active{% elif data.market_overview.sentiment == 'bearish' %}error{% else %}warning{% endif %}">
+                                {{ data.market_overview.sentiment.title() }}
+                            </span>
+                        </div>
+                        <div class="metric-label">Market Sentiment</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">
+                            <span class="status {% if data.market_overview.volatility == 'low' %}active{% elif data.market_overview.volatility == 'high' %}error{% else %}warning{% endif %}">
+                                {{ data.market_overview.volatility.title() }}
+                            </span>
+                        </div>
+                        <div class="metric-label">Volatility</div>
+                    </div>
+                </div>
+                <div class="grid grid-2">
+                    <div class="metric-card">
+                        <div class="metric-value {% if data.market_overview.crypto_performance > 0 %}text-success{% elif data.market_overview.crypto_performance < 0 %}text-danger{% else %}text-gray-600{% endif %}">
+                            {{ "{:+.2f}%".format(data.market_overview.crypto_performance) }}
+                        </div>
+                        <div class="metric-label">Crypto Performance</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value {% if data.market_overview.forex_performance > 0 %}text-success{% elif data.market_overview.forex_performance < 0 %}text-danger{% else %}text-gray-600{% endif %}">
+                            {{ "{:+.2f}%".format(data.market_overview.forex_performance) }}
+                        </div>
+                        <div class="metric-label">Forex Performance</div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center text-gray-600 mt-4">
+                    Market data unavailable
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Recent Transactions -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Recent Transactions</h3>
+                    <a href="/api/transactions" class="btn btn-outline btn-sm">View All</a>
+                </div>
+                {% if data.recent_transactions %}
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Symbol</th>
+                                <th class="text-right">Quantity</th>
+                                <th class="text-right">Price</th>
+                                <th class="text-right">Total</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tx in data.recent_transactions %}
+                            <tr>
+                                <td>
+                                    <span class="status {% if tx.transaction_type == 'buy' %}active{% else %}warning{% endif %}">
+                                        {{ tx.transaction_type.upper() }}
+                                    </span>
+                                </td>
+                                <td class="font-semibold">{{ tx.symbol or 'N/A' }}</td>
+                                <td class="text-right">{{ "{:.4f}".format(tx.quantity or 0) }}</td>
+                                <td class="text-right">${{ "{:.2f}".format(tx.price or 0) }}</td>
+                                <td class="text-right font-semibold">${{ "{:.2f}".format(tx.total_value or 0) }}</td>
+                                <td class="text-sm text-gray-600">{{ tx.timestamp[:16] if tx.timestamp else 'N/A' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-gray-600 mt-4">
+                    No recent transactions
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- System Status -->
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">System Status</h3>
+                    <span class="status active">
+                        <span class="status-dot"></span>
+                        Online
+                    </span>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-700">Broker Connection</span>
+                        <span class="status {% if data.broker_status and data.broker_status.status == 'active' %}active{% else %}error{% endif %}">
+                            {% if data.broker_status and data.broker_status.status == 'active' %}Connected{% else %}Disconnected{% endif %}
+                        </span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-700">Market Data</span>
+                        <span class="status active">Live</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-700">Agent Status</span>
+                        <span class="status active">5 Active</span>
+                    </div>
+                    <div class="flex justify-between items-center">
+                        <span class="text-gray-700">Decision Traces</span>
+                        <span class="status active">Recording</span>
+                    </div>
+                </div>
+                
+                {% if data.broker_status %}
+                <div class="mt-4 pt-4 border-t border-gray-200">
+                    <h4 class="font-semibold mb-2">Broker Performance</h4>
+                    <div class="grid grid-2">
+                        <div class="metric-card">
+                            <div class="metric-value {% if data.broker_status.pnl_percentage > 0 %}text-success{% elif data.broker_status.pnl_percentage < 0 %}text-danger{% else %}text-gray-600{% endif %}">
+                                {{ "{:+.2f}%".format(data.broker_status.pnl_percentage) }}
+                            </div>
+                            <div class="metric-label">P&L</div>
+                        </div>
+                        <div class="metric-card">
+                            <div class="metric-value text-primary">
+                                {{ data.broker_status.total_trades }}
+                            </div>
+                            <div class="metric-label">Total Trades</div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Recent Activity -->
+        {% if data.trace_statistics and data.trace_statistics.total_traces > 0 %}
+        <div class="card mt-6">
+            <div class="card-header">
+                <h3 class="card-title">Recent Agent Activity</h3>
+                <a href="{{ url_for('traces') }}" class="btn btn-outline btn-sm">View All Traces</a>
+            </div>
+            <div class="grid grid-3">
+                {% for agent_name, count in data.trace_statistics.agents.items() %}
+                <div class="metric-card">
+                    <div class="metric-value text-primary">{{ count }}</div>
+                    <div class="metric-label">{{ agent_name }}</div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="mt-4 pt-4 border-t border-gray-200">
+                <div class="flex justify-between items-center">
+                    <span class="text-gray-700">Average Performance</span>
+                    <span class="font-semibold text-primary">{{ "{:.1f}%".format(data.trace_statistics.average_confidence * 100) }}</span>
+                </div>
+                <div class="progress mt-2">
+                    <div class="progress-bar success" style="width: {{ data.trace_statistics.average_confidence * 100 }}%"></div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2024 Digital Twin LAM Financial Engineering System. Last updated: {{ data.last_updated[:19] if data else 'N/A' }}</p>
+    </footer>
+
+    <!-- JavaScript for real-time updates -->
+    <script>
+        // Auto-refresh dashboard every 30 seconds
+        function refreshDashboard() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.system === 'active') {
+                        // Update real-time indicator
+                        document.querySelector('.real-time-dot').style.backgroundColor = '#10b981';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error refreshing dashboard:', error);
+                    document.querySelector('.real-time-dot').style.backgroundColor = '#ef4444';
+                });
+        }
+
+        // Refresh every 30 seconds
+        setInterval(refreshDashboard, 30000);
+        
+        // Initial refresh
+        refreshDashboard();
+    </script>
+</body>
+</html>

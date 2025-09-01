@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeFi Analytics - Digital Twin LAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔗</text></svg>">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <h1>Digital Twin LAM</h1>
+                <p>DeFi Analytics Dashboard</p>
+            </div>
+            <div class="real-time-indicator">
+                <span class="real-time-dot"></span>
+                <span>On-Chain Data</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+            <a href="{{ url_for('agents') }}" class="nav-link">Agents</a>
+            <a href="{{ url_for('traces') }}" class="nav-link">Decision Traces</a>
+            <a href="{{ url_for('defi') }}" class="nav-link active">DeFi Analytics</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        {% if error %}
+        <div class="alert alert-danger">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- DeFi Overview -->
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">DeFi Intelligence Overview</h2>
+                <div class="flex gap-2">
+                    <button class="btn btn-primary" onclick="analyzeWhaleActivity()">
+                        Analyze Whale Activity
+                    </button>
+                    <button class="btn btn-outline" onclick="scanProtocols()">
+                        Scan Protocols
+                    </button>
+                </div>
+            </div>
+            
+            {% if data %}
+            <div class="grid grid-4 mb-4">
+                <div class="metric-card">
+                    <div class="metric-value text-primary">${{ "{:,.0f}".format(data.total_tvl_analyzed) }}</div>
+                    <div class="metric-label">Total TVL Analyzed</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value text-success">{{ "{:.1f}%".format(data.avg_risk_adjusted_apy) }}</div>
+                    <div class="metric-label">Avg Risk-Adj APY</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value text-info">{{ data.whale_transactions }}</div>
+                    <div class="metric-label">Whale Transactions</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value {% if data.whale_risk_level == 'HIGH' %}text-danger{% elif data.whale_risk_level == 'MEDIUM' %}text-warning{% else %}text-success{% endif %}">
+                        {{ data.whale_risk_level }}
+                    </div>
+                    <div class="metric-label">Whale Risk Level</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Whale Intelligence -->
+        <div class="card mb-6">
+            <div class="card-header">
+                <h3 class="card-title">Whale Intelligence</h3>
+                <span class="card-subtitle">Large transaction monitoring and behavioral analysis</span>
+            </div>
+            
+            <div class="grid grid-2 mb-4">
+                <div class="metric-card">
+                    <div class="metric-value text-primary" id="whaleVolume">$0</div>
+                    <div class="metric-label">24h Whale Volume</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value" id="whaleFlow">$0</div>
+                    <div class="metric-label">Net Flow</div>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Transaction</th>
+                            <th>Token</th>
+                            <th class="text-right">Value (USD)</th>
+                            <th>Pattern</th>
+                            <th>Risk Level</th>
+                            <th class="text-right">Confidence</th>
+                        </tr>
+                    </thead>
+                    <tbody id="whaleTransactions">
+                        <tr>
+                            <td colspan="6" class="text-center text-gray-600">
+                                Click "Analyze Whale Activity" to load data
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Protocol Opportunities -->
+        <div class="card mb-6">
+            <div class="card-header">
+                <h3 class="card-title">DeFi Protocol Opportunities</h3>
+                <span class="card-subtitle">Yield farming and lending opportunities across chains</span>
+            </div>
+            
+            <div class="grid grid-3 mb-4">
+                <div class="filter-group">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Chain</label>
+                    <select id="chainFilter" class="w-full p-2 border border-gray-300 rounded" onchange="filterProtocols()">
+                        <option value="">All Chains</option>
+                        <option value="ethereum">Ethereum</option>
+                        <option value="bsc">BSC</option>
+                        <option value="polygon">Polygon</option>
+                        <option value="arbitrum">Arbitrum</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Protocol Type</label>
+                    <select id="typeFilter" class="w-full p-2 border border-gray-300 rounded" onchange="filterProtocols()">
+                        <option value="">All Types</option>
+                        <option value="lending">Lending</option>
+                        <option value="dex">DEX</option>
+                        <option value="yield_farming">Yield Farming</option>
+                        <option value="liquid_staking">Liquid Staking</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Min APY</label>
+                    <input type="range" id="apyFilter" class="w-full" min="0" max="50" value="5" onchange="updateApyDisplay(); filterProtocols()">
+                    <div class="text-sm text-gray-600 mt-1">APY: <span id="apyDisplay">5%</span></div>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Protocol</th>
+                            <th>Chain</th>
+                            <th>Type</th>
+                            <th class="text-right">APY</th>
+                            <th class="text-right">Risk Score</th>
+                            <th class="text-right">TVL</th>
+                            <th>Recommendation</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="protocolOpportunities">
+                        <tr>
+                            <td colspan="8" class="text-center text-gray-600">
+                                Click "Scan Protocols" to load opportunities
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Arbitrage Opportunities -->
+        <div class="card mb-6">
+            <div class="card-header">
+                <h3 class="card-title">Cross-Chain Arbitrage</h3>
+                <span class="card-subtitle">Profit opportunities across different chains</span>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Source Chain</th>
+                            <th>Target Chain</th>
+                            <th>Protocol Pair</th>
+                            <th class="text-right">APY Difference</th>
+                            <th class="text-right">Est. Profit</th>
+                            <th class="text-right">Bridge Cost</th>
+                            <th>Risk Level</th>
+                            <th class="text-center">Execute</th>
+                        </tr>
+                    </thead>
+                    <tbody id="arbitrageOpportunities">
+                        <tr>
+                            <td colspan="8" class="text-center text-gray-600">
+                                Arbitrage opportunities will be displayed here
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- LAM Training Data -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">DeFi LAM Training</h3>
+                <p class="card-subtitle">On-chain behavioral patterns for Digital Twin LAM</p>
+            </div>
+            
+            <div class="alert alert-info mb-4">
+                <strong>LAM Data Collection:</strong> The DeFi Analyst agent is collecting on-chain behavioral patterns, 
+                whale movement correlations, and protocol performance data to train the Digital Twin LAM on optimal 
+                DeFi strategies and risk management.
+            </div>
+            
+            <div class="grid grid-2">
+                <div>
+                    <h4 class="font-semibold mb-3">Training Data Categories</h4>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span>Whale transaction patterns:</span>
+                            <span class="font-semibold" id="whalePatterns">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Protocol performance records:</span>
+                            <span class="font-semibold" id="protocolRecords">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Arbitrage execution logs:</span>
+                            <span class="font-semibold" id="arbitrageLogs">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Risk assessment cases:</span>
+                            <span class="font-semibold" id="riskCases">0</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-3">LAM Learning Progress</h4>
+                    <div class="space-y-3">
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-sm">Whale behavior recognition</span>
+                                <span class="text-sm">75%</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar info" style="width: 75%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-sm">Protocol risk assessment</span>
+                                <span class="text-sm">60%</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar warning" style="width: 60%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-sm">Arbitrage opportunity detection</span>
+                                <span class="text-sm">45%</span>
+                            </div>
+                            <div class="progress">
+                                <div class="progress-bar danger" style="width: 45%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2024 Digital Twin LAM - DeFi Analytics Dashboard</p>
+    </footer>
+
+    <!-- JavaScript -->
+    <script>
+        let whaleData = null;
+        let protocolData = null;
+        let arbitrageData = null;
+
+        function analyzeWhaleActivity() {
+            showLoadingSpinner();
+            
+            fetch('/api/defi/whale-analysis', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoadingSpinner();
+                whaleData = data;
+                updateWhaleDisplay(data);
+                updateLAMTrainingData();
+            })
+            .catch(error => {
+                hideLoadingSpinner();
+                console.error('Error analyzing whale activity:', error);
+                showError('Failed to analyze whale activity: ' + error.message);
+            });
+        }
+
+        function scanProtocols() {
+            showLoadingSpinner();
+            
+            fetch('/api/defi/protocol-scan', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    min_apy: parseFloat(document.getElementById('apyFilter').value),
+                    chains: getSelectedChains(),
+                    protocol_types: getSelectedProtocolTypes()
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoadingSpinner();
+                protocolData = data;
+                updateProtocolDisplay(data);
+                updateArbitrageDisplay(data.arbitrage_opportunities || []);
+                updateLAMTrainingData();
+            })
+            .catch(error => {
+                hideLoadingSpinner();
+                console.error('Error scanning protocols:', error);
+                showError('Failed to scan protocols: ' + error.message);
+            });
+        }
+
+        function updateWhaleDisplay(data) {
+            // Update metrics
+            document.getElementById('whaleVolume').textContent = 
+                '$' + (data.summary?.total_volume_usd || 0).toLocaleString();
+            
+            const netFlow = data.market_impact?.net_flow_usd || 0;
+            const flowElement = document.getElementById('whaleFlow');
+            flowElement.textContent = '$' + Math.abs(netFlow).toLocaleString();
+            flowElement.className = 'metric-value ' + (netFlow >= 0 ? 'text-success' : 'text-danger');
+
+            // Update transactions table
+            const tbody = document.getElementById('whaleTransactions');
+            tbody.innerHTML = '';
+
+            if (data.transactions && data.transactions.length > 0) {
+                data.transactions.forEach(tx => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td class="font-mono text-sm">${tx.tx_hash || 'N/A'}</td>
+                        <td class="font-semibold">${tx.token || 'ETH'}</td>
+                        <td class="text-right font-semibold">$${(tx.usd_value || 0).toLocaleString()}</td>
+                        <td><span class="badge badge-info">${tx.pattern || 'unknown'}</span></td>
+                        <td><span class="badge ${getRiskBadgeClass(tx.risk_level || 'MEDIUM')}">${tx.risk_level || 'MEDIUM'}</span></td>
+                        <td class="text-right">${((tx.confidence || 0) * 100).toFixed(1)}%</td>
+                    `;
+                });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-600">No whale transactions found</td></tr>';
+            }
+        }
+
+        function updateProtocolDisplay(data) {
+            const tbody = document.getElementById('protocolOpportunities');
+            tbody.innerHTML = '';
+
+            if (data.top_yield_opportunities && data.top_yield_opportunities.length > 0) {
+                data.top_yield_opportunities.forEach(protocol => {
+                    const row = tbody.insertRow();
+                    row.className = 'protocol-row';
+                    row.dataset.chain = protocol.chain;
+                    row.dataset.type = protocol.protocol_type;
+                    row.dataset.apy = protocol.risk_adjusted_apy;
+                    
+                    row.innerHTML = `
+                        <td class="font-semibold">${protocol.protocol_name}</td>
+                        <td><span class="badge badge-outline">${protocol.chain}</span></td>
+                        <td><span class="badge badge-info">${protocol.protocol_type}</span></td>
+                        <td class="text-right font-semibold text-success">${protocol.risk_adjusted_apy.toFixed(2)}%</td>
+                        <td class="text-right"><span class="badge ${getRiskBadgeClass(protocol.risk_score)}">${protocol.risk_score}</span></td>
+                        <td class="text-right">$${(protocol.tvl_usd || 0).toLocaleString()}</td>
+                        <td><span class="badge ${getRecommendationBadgeClass(protocol.recommendation)}">${protocol.recommendation}</span></td>
+                        <td class="text-center">
+                            <button class="btn btn-primary btn-sm" onclick="enterPosition('${protocol.protocol_name}', '${protocol.chain}')">
+                                Enter Position
+                            </button>
+                        </td>
+                    `;
+                });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-600">No protocol opportunities found</td></tr>';
+            }
+        }
+
+        function updateArbitrageDisplay(arbitrageOpps) {
+            const tbody = document.getElementById('arbitrageOpportunities');
+            tbody.innerHTML = '';
+
+            if (arbitrageOpps && arbitrageOpps.length > 0) {
+                arbitrageOpps.forEach(opp => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td><span class="badge badge-outline">${opp.source_chain}</span></td>
+                        <td><span class="badge badge-outline">${opp.target_chain}</span></td>
+                        <td class="text-sm">${opp.source_protocol} → ${opp.target_protocol}</td>
+                        <td class="text-right font-semibold">${opp.apy_difference.toFixed(2)}%</td>
+                        <td class="text-right font-semibold text-success">${opp.estimated_profit.toFixed(2)}%</td>
+                        <td class="text-right">${opp.bridge_cost_estimate.toFixed(2)}%</td>
+                        <td><span class="badge ${getRiskBadgeClass(opp.risk_assessment?.overall_risk || 'MEDIUM')}">${opp.risk_assessment?.overall_risk || 'MEDIUM'}</span></td>
+                        <td class="text-center">
+                            <button class="btn btn-warning btn-sm" onclick="executeArbitrage('${opp.source_chain}', '${opp.target_chain}')">
+                                Execute
+                            </button>
+                        </td>
+                    `;
+                });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-600">No arbitrage opportunities available</td></tr>';
+            }
+        }
+
+        function updateLAMTrainingData() {
+            // Update training data counters (simulated for now)
+            document.getElementById('whalePatterns').textContent = whaleData?.transactions?.length || 0;
+            document.getElementById('protocolRecords').textContent = protocolData?.top_yield_opportunities?.length || 0;
+            document.getElementById('arbitrageLogs').textContent = protocolData?.arbitrage_opportunities?.length || 0;
+            document.getElementById('riskCases').textContent = (whaleData?.transactions?.length || 0) + (protocolData?.top_yield_opportunities?.length || 0);
+        }
+
+        function filterProtocols() {
+            const chainFilter = document.getElementById('chainFilter').value;
+            const typeFilter = document.getElementById('typeFilter').value;
+            const apyFilter = parseFloat(document.getElementById('apyFilter').value);
+
+            const rows = document.querySelectorAll('.protocol-row');
+            
+            rows.forEach(row => {
+                const chain = row.dataset.chain;
+                const type = row.dataset.type;
+                const apy = parseFloat(row.dataset.apy);
+
+                const matchesChain = !chainFilter || chain === chainFilter;
+                const matchesType = !typeFilter || type === typeFilter;
+                const matchesApy = apy >= apyFilter;
+
+                row.style.display = (matchesChain && matchesType && matchesApy) ? '' : 'none';
+            });
+        }
+
+        function updateApyDisplay() {
+            const value = document.getElementById('apyFilter').value;
+            document.getElementById('apyDisplay').textContent = value + '%';
+        }
+
+        function enterPosition(protocol, chain) {
+            if (confirm(`Enter yield position on ${protocol} (${chain})?`)) {
+                fetch('/api/defi/enter-position', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        protocol: protocol,
+                        chain: chain,
+                        action: 'enter_yield_position'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'completed') {
+                        showSuccess(`Position entered on ${protocol}`);
+                    } else {
+                        showError('Failed to enter position: ' + (data.message || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    showError('Error entering position: ' + error.message);
+                });
+            }
+        }
+
+        function executeArbitrage(sourceChain, targetChain) {
+            if (confirm(`Execute arbitrage between ${sourceChain} and ${targetChain}?`)) {
+                fetch('/api/defi/execute-arbitrage', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        source_chain: sourceChain,
+                        target_chain: targetChain,
+                        action: 'execute_arbitrage'
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'completed') {
+                        showSuccess(`Arbitrage executed: ${sourceChain} → ${targetChain}`);
+                    } else {
+                        showError('Failed to execute arbitrage: ' + (data.message || 'Unknown error'));
+                    }
+                })
+                .catch(error => {
+                    showError('Error executing arbitrage: ' + error.message);
+                });
+            }
+        }
+
+        function getSelectedChains() {
+            const filter = document.getElementById('chainFilter').value;
+            return filter ? [filter] : ['ethereum', 'bsc', 'polygon', 'arbitrum'];
+        }
+
+        function getSelectedProtocolTypes() {
+            const filter = document.getElementById('typeFilter').value;
+            return filter ? [filter] : ['lending', 'dex', 'yield_farming', 'liquid_staking'];
+        }
+
+        function getRiskBadgeClass(risk) {
+            if (typeof risk === 'string') {
+                switch(risk.toUpperCase()) {
+                    case 'HIGH': return 'badge-danger';
+                    case 'MEDIUM': return 'badge-warning';
+                    case 'LOW': return 'badge-success';
+                    default: return 'badge-info';
+                }
+            } else {
+                // Numeric risk score
+                if (risk >= 70) return 'badge-danger';
+                if (risk >= 40) return 'badge-warning';
+                return 'badge-success';
+            }
+        }
+
+        function getRecommendationBadgeClass(recommendation) {
+            switch(recommendation) {
+                case 'STRONG_BUY': return 'badge-success';
+                case 'BUY': return 'badge-success';
+                case 'HOLD': return 'badge-warning';
+                case 'AVOID': return 'badge-danger';
+                default: return 'badge-info';
+            }
+        }
+
+        function showLoadingSpinner() {
+            // Add loading spinner implementation
+            console.log('Loading...');
+        }
+
+        function hideLoadingSpinner() {
+            // Hide loading spinner implementation
+            console.log('Loading complete');
+        }
+
+        function showSuccess(message) {
+            // Show success message
+            alert('Success: ' + message);
+        }
+
+        function showError(message) {
+            // Show error message
+            alert('Error: ' + message);
+        }
+
+        // Auto-refresh data every 5 minutes
+        setInterval(() => {
+            if (whaleData) analyzeWhaleActivity();
+            if (protocolData) scanProtocols();
+        }, 300000);
+    </script>
+</body>
+</html>

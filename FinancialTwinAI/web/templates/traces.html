@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decision Traces - Digital Twin LAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <h1>Digital Twin LAM</h1>
+                <p>Financial Engineering System</p>
+            </div>
+            <div class="real-time-indicator">
+                <span class="real-time-dot"></span>
+                <span>Live Data</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+            <a href="{{ url_for('agents') }}" class="nav-link">Agents</a>
+            <a href="{{ url_for('traces') }}" class="nav-link active">Decision Traces</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        {% if error %}
+        <div class="alert alert-danger">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- Trace Statistics -->
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Decision Trace Analytics</h2>
+                <p class="card-subtitle">LAM Training Data Collection & Agent Performance</p>
+            </div>
+            
+            {% if data and data.statistics %}
+            <div class="grid grid-4 mb-4">
+                <div class="metric-card">
+                    <div class="metric-value text-primary">{{ data.statistics.total_traces }}</div>
+                    <div class="metric-label">Total Traces</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value text-success">{{ data.statistics.completed_with_outcomes }}</div>
+                    <div class="metric-label">With Outcomes</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value text-info">{{ data.statistics.agents|length if data.statistics.agents else 0 }}</div>
+                    <div class="metric-label">Active Agents</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value {% if data.statistics.average_confidence >= 0.8 %}text-success{% elif data.statistics.average_confidence >= 0.6 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ "{:.1f}%".format((data.statistics.average_confidence or 0) * 100) }}
+                    </div>
+                    <div class="metric-label">Avg Performance</div>
+                </div>
+            </div>
+
+            {% if data.statistics.agents %}
+            <div class="mt-4">
+                <h4 class="font-semibold mb-3">Agent Activity Breakdown</h4>
+                <div class="grid grid-3">
+                    {% for agent_name, count in data.statistics.agents.items() %}
+                    <div class="metric-card">
+                        <div class="metric-value text-primary">{{ count }}</div>
+                        <div class="metric-label">{{ agent_name }}</div>
+                        <div class="progress mt-2">
+                            <div class="progress-bar info" style="width: {{ (count / data.statistics.total_traces * 100) if data.statistics.total_traces > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="text-center text-gray-600 mt-4">
+                No trace statistics available
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Trace Filters -->
+        <div class="card mb-6">
+            <div class="card-header">
+                <h3 class="card-title">Filter Traces</h3>
+            </div>
+            <div class="grid grid-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Agent</label>
+                    <select id="agentFilter" class="w-full p-2 border border-gray-300 rounded" onchange="filterTraces()">
+                        <option value="">All Agents</option>
+                        <option value="FinancePlanner">Finance Planner</option>
+                        <option value="TradingStrategist">Trading Strategist</option>
+                        <option value="AccountingClerk">Accounting Clerk</option>
+                        <option value="AutomationPilot">Automation Pilot</option>
+                        <option value="Reinvestor">Reinvestor</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Performance</label>
+                    <select id="performanceFilter" class="w-full p-2 border border-gray-300 rounded" onchange="filterTraces()">
+                        <option value="">All Performance</option>
+                        <option value="high">High (80%+)</option>
+                        <option value="medium">Medium (60-80%)</option>
+                        <option value="low">Low (<60%)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Has Outcome</label>
+                    <select id="outcomeFilter" class="w-full p-2 border border-gray-300 rounded" onchange="filterTraces()">
+                        <option value="">All Traces</option>
+                        <option value="true">With Outcomes</option>
+                        <option value="false">Without Outcomes</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button class="btn btn-primary w-full" onclick="refreshTraces()">
+                        Refresh Traces
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Traces -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Recent Decision Traces</h3>
+                <div class="flex gap-2">
+                    <button class="btn btn-outline btn-sm" onclick="exportTrainingData()">
+                        Export Training Data
+                    </button>
+                    <span class="text-sm text-gray-600">{{ data.total_traces if data else 0 }} traces</span>
+                </div>
+            </div>
+            
+            {% if data and data.recent_traces %}
+            <div id="tracesContainer">
+                {% for trace in data.recent_traces %}
+                <div class="trace-card" data-agent="{{ trace.agent_name }}" data-performance="{{ trace.performance_score or 0 }}" data-outcome="{{ 'true' if trace.has_outcome else 'false' }}">
+                    <div class="trace-header">
+                        <div>
+                            <span class="trace-agent">{{ trace.agent_name }}</span>
+                            <span class="trace-id">{{ trace.trace_id[:8] }}...</span>
+                        </div>
+                        <div class="text-sm text-gray-600">
+                            {{ trace.timestamp[:16] if trace.timestamp else 'N/A' }}
+                        </div>
+                    </div>
+                    
+                    <div class="trace-action">
+                        {{ trace.action_taken }}
+                    </div>
+                    
+                    <div class="trace-score">
+                        <span class="text-sm text-gray-600">Performance:</span>
+                        <div class="score-bar">
+                            {% set score = (trace.performance_score or 0) * 100 %}
+                            <div class="score-fill {% if score >= 80 %}bg-success{% elif score >= 60 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                 style="width: {{ score }}%; background-color: {% if score >= 80 %}var(--success-color){% elif score >= 60 %}var(--warning-color){% else %}var(--danger-color){% endif %}"></div>
+                        </div>
+                        <span class="text-sm font-semibold">{{ "{:.1f}%".format(score) }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center mt-3">
+                        <span class="status {% if trace.has_outcome %}active{% else %}warning{% endif %}">
+                            {% if trace.has_outcome %}
+                            <span class="status-dot"></span>
+                            Has Outcome
+                            {% else %}
+                            <span class="status-dot"></span>
+                            Pending Outcome
+                            {% endif %}
+                        </span>
+                        <button class="btn btn-outline btn-sm" onclick="viewTraceDetails('{{ trace.trace_id }}')">
+                            View Details
+                        </button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-center text-gray-600 mt-4">
+                No decision traces available
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- LAM Training Info -->
+        <div class="card mt-6">
+            <div class="card-header">
+                <h3 class="card-title">LAM Training Data Collection</h3>
+                <p class="card-subtitle">Building datasets for future Digital Twin LAM training</p>
+            </div>
+            
+            <div class="alert alert-info mb-4">
+                <strong>LAM Preparation:</strong> Every agent decision is being traced and logged to build comprehensive training datasets. 
+                This data will be used to train Large Action Models (LAMs) that can replicate and improve upon agent decision-making patterns.
+            </div>
+            
+            <div class="grid grid-2">
+                <div>
+                    <h4 class="font-semibold mb-3">Training Data Quality</h4>
+                    <div class="space-y-2">
+                        <div class="flex justify-between">
+                            <span>High-quality traces (80%+ performance):</span>
+                            <span class="font-semibold">
+                                {% if data and data.statistics %}
+                                {{ data.recent_traces|selectattr('performance_score', 'ge', 0.8)|list|length }}
+                                {% else %}
+                                0
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Complete traces with outcomes:</span>
+                            <span class="font-semibold">
+                                {% if data and data.statistics %}
+                                {{ data.statistics.completed_with_outcomes }}
+                                {% else %}
+                                0
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Multi-agent decision sequences:</span>
+                            <span class="font-semibold">
+                                {% if data and data.statistics and data.statistics.agents %}
+                                {{ data.statistics.agents|length }}
+                                {% else %}
+                                0
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h4 class="font-semibold mb-3">Next Steps</h4>
+                    <ul class="text-sm text-gray-700 space-y-1">
+                        <li>• Continue collecting decision traces from all agents</li>
+                        <li>• Record user interactions for comparative analysis</li>
+                        <li>• Build training datasets when sufficient data is collected</li>
+                        <li>• Train specialized LAMs for each agent type</li>
+                        <li>• Gradually replace agents with trained LAMs</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2024 Digital Twin LAM Financial Engineering System</p>
+    </footer>
+
+    <!-- JavaScript -->
+    <script>
+        function filterTraces() {
+            const agentFilter = document.getElementById('agentFilter').value;
+            const performanceFilter = document.getElementById('performanceFilter').value;
+            const outcomeFilter = document.getElementById('outcomeFilter').value;
+            
+            const traces = document.querySelectorAll('.trace-card');
+            
+            traces.forEach(trace => {
+                let show = true;
+                
+                // Agent filter
+                if (agentFilter && trace.dataset.agent !== agentFilter) {
+                    show = false;
+                }
+                
+                // Performance filter
+                if (performanceFilter) {
+                    const performance = parseFloat(trace.dataset.performance);
+                    switch (performanceFilter) {
+                        case 'high':
+                            if (performance < 0.8) show = false;
+                            break;
+                        case 'medium':
+                            if (performance < 0.6 || performance >= 0.8) show = false;
+                            break;
+                        case 'low':
+                            if (performance >= 0.6) show = false;
+                            break;
+                    }
+                }
+                
+                // Outcome filter
+                if (outcomeFilter && trace.dataset.outcome !== outcomeFilter) {
+                    show = false;
+                }
+                
+                trace.style.display = show ? 'block' : 'none';
+            });
+        }
+        
+        function refreshTraces() {
+            window.location.reload();
+        }
+        
+        function viewTraceDetails(traceId) {
+            // In a real implementation, this would open a modal or navigate to a details page
+            alert(`Viewing details for trace: ${traceId}\n\nThis would show:\n- Complete decision context\n- Reasoning process steps\n- Action taken details\n- Outcome data\n- Performance metrics`);
+        }
+        
+        function exportTrainingData() {
+            // Create and download a sample training data file
+            const trainingData = {
+                "export_timestamp": new Date().toISOString(),
+                "total_traces": {{ data.statistics.total_traces if data and data.statistics else 0 }},
+                "quality_filter": "performance >= 0.6",
+                "format": "LAM_training_format_v1",
+                "sample_traces": [
+                    {
+                        "input": {
+                            "context": {"market_conditions": "bullish", "cash_balance": 5000},
+                            "agent_type": "TradingStrategist"
+                        },
+                        "reasoning": "Market analysis shows strong upward trend with low volatility",
+                        "output": "buy BTC/USDT quantity=0.1",
+                        "quality_score": 0.85
+                    }
+                ]
+            };
+            
+            const dataStr = JSON.stringify(trainingData, null, 2);
+            const dataBlob = new Blob([dataStr], {type: 'application/json'});
+            const url = URL.createObjectURL(dataBlob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `lam_training_data_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            alert('Training data exported successfully!\n\nThis export contains decision traces formatted for LAM training.');
+        }
+        
+        // Auto-refresh traces every 2 minutes
+        function refreshTracesData() {
+            fetch('/api/traces?limit=20')
+                .then(response => response.json())
+                .then(data => {
+                    // Update real-time indicator
+                    document.querySelector('.real-time-dot').style.backgroundColor = '#10b981';
+                    
+                    // Could update traces dynamically here
+                    console.log('Traces refreshed:', data.traces.length);
+                })
+                .catch(error => {
+                    console.error('Error refreshing traces:', error);
+                    document.querySelector('.real-time-dot').style.backgroundColor = '#ef4444';
+                });
+        }
+        
+        setInterval(refreshTracesData, 120000); // 2 minutes
+        refreshTracesData();
+    </script>
+</body>
+</html>

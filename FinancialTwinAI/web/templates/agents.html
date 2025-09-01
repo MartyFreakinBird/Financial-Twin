@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agents - Digital Twin LAM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <h1>Digital Twin LAM</h1>
+                <p>Financial Engineering System</p>
+            </div>
+            <div class="real-time-indicator">
+                <span class="real-time-dot"></span>
+                <span>Live Data</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="{{ url_for('dashboard') }}" class="nav-link">Dashboard</a>
+            <a href="{{ url_for('agents') }}" class="nav-link active">Agents</a>
+            <a href="{{ url_for('traces') }}" class="nav-link">Decision Traces</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        {% if error %}
+        <div class="alert alert-danger">
+            <strong>Error:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- Agents Overview -->
+        <div class="card mb-6">
+            <div class="card-header">
+                <h2 class="card-title">Agent System Overview</h2>
+                <button class="btn btn-primary" onclick="executeAllAgents()">
+                    Execute Weekly Pipeline
+                </button>
+            </div>
+            
+            {% if data %}
+            <div class="grid grid-4 mb-4">
+                <div class="metric-card">
+                    <div class="metric-value text-primary">{{ data.total_agents }}</div>
+                    <div class="metric-label">Total Agents</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value text-success">{{ data.active_agents }}</div>
+                    <div class="metric-label">Active Agents</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value text-info">{{ data.total_decisions }}</div>
+                    <div class="metric-label">Total Decisions</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value {% if data.overall_success_rate >= 80 %}text-success{% elif data.overall_success_rate >= 60 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ "{:.1f}%".format(data.overall_success_rate) }}
+                    </div>
+                    <div class="metric-label">Success Rate</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Individual Agents -->
+        <div class="grid grid-2">
+            {% if data and data.agents %}
+            {% for agent in data.agents %}
+            <div class="card agent-card {% if agent.status == 'active' %}active{% else %}inactive{% endif %}">
+                <div class="agent-header">
+                    <div>
+                        <h3 class="agent-name">{{ agent.name }}</h3>
+                        <p class="card-subtitle">
+                            {% if agent.name == 'FinancePlanner' %}
+                            Creates weekly financial plans based on balance, risk model, and upcoming events
+                            {% elif agent.name == 'TradingStrategist' %}
+                            Analyzes crypto/forex data and deploys trades through mock or real APIs
+                            {% elif agent.name == 'AccountingClerk' %}
+                            Logs expenses, categorizes cash flow, and updates equity positions
+                            {% elif agent.name == 'AutomationPilot' %}
+                            Handles GUI actions when no API exists (clicking, inputting, exporting reports)
+                            {% elif agent.name == 'Reinvestor' %}
+                            Analyzes idle cash and deploys based on thresholds (yield farming, DCA, margin, etc.)
+                            {% else %}
+                            Multi-purpose financial agent
+                            {% endif %}
+                        </p>
+                    </div>
+                    <span class="status {% if agent.status == 'active' %}active{% else %}inactive{% endif %}">
+                        <span class="status-dot"></span>
+                        {{ agent.status.title() }}
+                    </span>
+                </div>
+
+                <div class="agent-metrics">
+                    <div class="agent-metric">
+                        <div class="agent-metric-value">{{ agent.decisions_count }}</div>
+                        <div class="agent-metric-label">Decisions</div>
+                    </div>
+                    <div class="agent-metric">
+                        <div class="agent-metric-value {% if agent.success_rate >= 80 %}text-success{% elif agent.success_rate >= 60 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ "{:.1f}%".format(agent.success_rate) }}
+                        </div>
+                        <div class="agent-metric-label">Success Rate</div>
+                    </div>
+                    <div class="agent-metric">
+                        <div class="agent-metric-value text-gray-600 text-sm">
+                            {{ agent.last_run[:16] if agent.last_run else 'Never' }}
+                        </div>
+                        <div class="agent-metric-label">Last Run</div>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <div class="progress mb-2">
+                        <div class="progress-bar {% if agent.success_rate >= 80 %}success{% elif agent.success_rate >= 60 %}warning{% else %}danger{% endif %}" 
+                             style="width: {{ agent.success_rate }}%"></div>
+                    </div>
+                    <div class="flex justify-between">
+                        <button class="btn btn-primary btn-sm" onclick="executeAgent('{{ agent.name }}')">
+                            Execute Agent
+                        </button>
+                        <button class="btn btn-outline btn-sm" onclick="viewAgentDetails('{{ agent.name }}')">
+                            View Details
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="card col-span-2">
+                <div class="text-center text-gray-600 mt-4">
+                    No agent data available
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Agent Performance Chart -->
+        <div class="card mt-6">
+            <div class="card-header">
+                <h3 class="card-title">Agent Performance Comparison</h3>
+                <span class="card-subtitle">Success rates and decision counts</span>
+            </div>
+            
+            {% if data and data.agents %}
+            <div class="overflow-x-auto">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Agent</th>
+                            <th>Status</th>
+                            <th class="text-right">Decisions</th>
+                            <th class="text-right">Success Rate</th>
+                            <th class="text-right">Last Run</th>
+                            <th>Performance</th>
+                            <th class="text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for agent in data.agents %}
+                        <tr>
+                            <td class="font-semibold">{{ agent.name }}</td>
+                            <td>
+                                <span class="status {% if agent.status == 'active' %}active{% else %}inactive{% endif %}">
+                                    <span class="status-dot"></span>
+                                    {{ agent.status.title() }}
+                                </span>
+                            </td>
+                            <td class="text-right">{{ agent.decisions_count }}</td>
+                            <td class="text-right {% if agent.success_rate >= 80 %}text-success{% elif agent.success_rate >= 60 %}text-warning{% else %}text-danger{% endif %}">
+                                {{ "{:.1f}%".format(agent.success_rate) }}
+                            </td>
+                            <td class="text-right text-sm text-gray-600">
+                                {{ agent.last_run[:16] if agent.last_run else 'Never' }}
+                            </td>
+                            <td style="width: 150px;">
+                                <div class="progress">
+                                    <div class="progress-bar {% if agent.success_rate >= 80 %}success{% elif agent.success_rate >= 60 %}warning{% else %}danger{% endif %}" 
+                                         style="width: {{ agent.success_rate }}%"></div>
+                                </div>
+                            </td>
+                            <td class="text-center">
+                                <button class="btn btn-primary btn-sm mr-2" onclick="executeAgent('{{ agent.name }}')">
+                                    Execute
+                                </button>
+                                <button class="btn btn-outline btn-sm" onclick="viewAgentLogs('{{ agent.name }}')">
+                                    Logs
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Agent Execution Log -->
+        <div class="card mt-6" id="executionLog" style="display: none;">
+            <div class="card-header">
+                <h3 class="card-title">Execution Log</h3>
+                <button class="btn btn-outline btn-sm" onclick="clearLog()">Clear Log</button>
+            </div>
+            <div id="logContent" class="font-mono text-sm bg-gray-100 p-4 rounded max-h-64 overflow-y-auto">
+                <!-- Log entries will be added here -->
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <p>&copy; 2024 Digital Twin LAM Financial Engineering System</p>
+    </footer>
+
+    <!-- JavaScript -->
+    <script>
+        let logVisible = false;
+        
+        function executeAgent(agentName) {
+            showLog();
+            addLogEntry(`Executing agent: ${agentName}...`, 'info');
+            
+            fetch(`/api/execute/${agentName}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'executed') {
+                    addLogEntry(`✓ ${agentName} executed successfully`, 'success');
+                } else {
+                    addLogEntry(`✗ ${agentName} execution failed: ${data.message || 'Unknown error'}`, 'error');
+                }
+            })
+            .catch(error => {
+                addLogEntry(`✗ ${agentName} execution error: ${error.message}`, 'error');
+            });
+        }
+        
+        function executeAllAgents() {
+            showLog();
+            addLogEntry('Starting weekly pipeline execution...', 'info');
+            
+            const agents = ['FinancePlanner', 'AccountingClerk', 'TradingStrategist', 'Reinvestor', 'AutomationPilot'];
+            let currentAgent = 0;
+            
+            function executeNext() {
+                if (currentAgent >= agents.length) {
+                    addLogEntry('✓ Weekly pipeline execution completed', 'success');
+                    return;
+                }
+                
+                const agentName = agents[currentAgent];
+                executeAgent(agentName);
+                currentAgent++;
+                
+                // Execute next agent after 2 seconds
+                setTimeout(executeNext, 2000);
+            }
+            
+            executeNext();
+        }
+        
+        function viewAgentDetails(agentName) {
+            fetch(`/api/agent/${agentName}/status`)
+                .then(response => response.json())
+                .then(data => {
+                    showLog();
+                    addLogEntry(`Agent Details: ${agentName}`, 'info');
+                    addLogEntry(`Status: ${data.status}`, 'info');
+                    addLogEntry(`Recent Decisions: ${data.decision_count}`, 'info');
+                    addLogEntry(`Last Activity: ${data.timestamp}`, 'info');
+                })
+                .catch(error => {
+                    addLogEntry(`Error fetching agent details: ${error.message}`, 'error');
+                });
+        }
+        
+        function viewAgentLogs(agentName) {
+            showLog();
+            addLogEntry(`Fetching logs for ${agentName}...`, 'info');
+            
+            fetch(`/api/traces?agent=${agentName}&limit=5`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.traces && data.traces.length > 0) {
+                        addLogEntry(`Recent decisions for ${agentName}:`, 'info');
+                        data.traces.forEach(trace => {
+                            const score = trace.performance_score ? `(${(trace.performance_score * 100).toFixed(1)}%)` : '';
+                            addLogEntry(`- ${trace.action_taken} ${score}`, 'info');
+                        });
+                    } else {
+                        addLogEntry(`No recent traces found for ${agentName}`, 'info');
+                    }
+                })
+                .catch(error => {
+                    addLogEntry(`Error fetching logs: ${error.message}`, 'error');
+                });
+        }
+        
+        function showLog() {
+            const logDiv = document.getElementById('executionLog');
+            logDiv.style.display = 'block';
+            logVisible = true;
+        }
+        
+        function clearLog() {
+            document.getElementById('logContent').innerHTML = '';
+        }
+        
+        function addLogEntry(message, type = 'info') {
+            const logContent = document.getElementById('logContent');
+            const timestamp = new Date().toLocaleTimeString();
+            const colorClass = type === 'success' ? 'text-success' : type === 'error' ? 'text-danger' : 'text-gray-700';
+            
+            const entry = document.createElement('div');
+            entry.className = `mb-1 ${colorClass}`;
+            entry.innerHTML = `<span class="text-gray-500">[${timestamp}]</span> ${message}`;
+            
+            logContent.appendChild(entry);
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+        
+        // Auto-refresh agent status every 60 seconds
+        function refreshAgentStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.system === 'active') {
+                        document.querySelector('.real-time-dot').style.backgroundColor = '#10b981';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error refreshing agent status:', error);
+                    document.querySelector('.real-time-dot').style.backgroundColor = '#ef4444';
+                });
+        }
+        
+        setInterval(refreshAgentStatus, 60000);
+        refreshAgentStatus();
+    </script>
+</body>
+</html>
